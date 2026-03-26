@@ -1,0 +1,406 @@
+---
+title: "Case Study 1 DDS"
+author: "Avery"
+date: "2026-02-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#Executive Summary
+```{r}
+#Our question of interest we wanted to answer was what were the top factors contributing to employee attrition at Frito Lay. Based on my analysis, I found overtime, job satisfaction, job level, age and monthly income to be the top key factors that were significantly related to attrition. The initial KNN and Naive Bayes models I built to predict attrition had low sensitivity rates, so I balanced the data set from Frito Lay and reconfigured both models to give me a desired sensitivity rate of at least 60%. The final takeaway I got from my analysis was that younger people in lower job level roles seem most likely to leave Frito Lay.
+
+```
+
+
+#Introduction & Objective
+```{r}
+#We were given a data set from Frito Lay and asked to identify the key factors driving employee attrition at the company.
+
+```
+
+
+#Importing the Libraries
+```{r}
+library(tidyverse)
+library(maps)
+library(gridExtra)
+library(class)
+library(caret)
+library(e1071)
+```
+
+
+# Import Attrition CSV file
+```{r}
+#Import CaseStudy1-data.csv
+turnover <- read.csv("../assets/data/CaseStudy1-data.csv", header = TRUE)
+
+sum(is.na(turnover))
+#No NA values
+
+#Attrition Column Values: "Yes" = The employee left the company, "No" = The employee stayed at the company or is still employed
+```
+
+
+#Plot Summary of Attrition in Percentages
+```{r}
+#turning Attrition into a factor
+turnover$Attrition <- as.factor(turnover$Attrition)
+table(turnover$Attrition)
+#Attrition is relatively low at 16%
+
+library(ggplot2)
+ggplot(data = turnover, aes(x = Attrition, fill = Attrition)) + geom_bar(aes(y = after_stat(count / sum(count)))) + geom_text(stat = "count", aes(y = after_stat(count / sum(count)), label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)), vjust = -0.3, color = "black") + scale_y_continuous(labels = scales::percent_format()) + labs(title = "Attrition Rate at Frito Lay", x = "Attrition", y = "Percentage of Employees", fill = NULL) + theme(legend.position = "none")
+
+```
+
+
+#Exploratory Data Analysis and Visualization of Factors
+```{r}
+colnames(turnover)
+
+#Graph 1 - Monthly Income Histogram
+ggplot(data = turnover, aes(x = MonthlyIncome, fill = Attrition)) + geom_histogram() + labs(title = "Attrition by Monthly Income", x = "Monthly Income", y = "Number of Employees") + facet_grid(~Attrition)
+#Most employees who left reported a monthly income of lower than $10000
+
+#Graph 2 - Age Density Plot
+ggplot(data = turnover, aes(x = Age, fill = Attrition)) + geom_density(alpha = 0.5) + labs(title = "Age Distribution by Attrition", x = "Age", y = "Density")
+#More younger employees are leaving the company than older employees
+
+#Graph 3 - Age x Job Level Histograms
+ggplot(data = turnover, aes(x = Age, fill = JobLevel)) + geom_histogram() + labs(title = "Distribution of Ages by Job Level", x = "Age", y = "Count", fill = "Job Level") + facet_wrap(~JobLevel) + theme(legend.position = "none")
+#I wanted to see if the assertion that more younger people had lower job levels because they had less experience was supported
+
+#Creating a new data set with only 'Yes' for Attrition
+turnover_yes <- turnover %>% filter(Attrition == "Yes")
+dim(turnover_yes)
+
+#Graph 4 - Job Level (only for those who left)
+ggplot(data = turnover_yes, aes(x = JobLevel, fill = Attrition)) + geom_bar(aes(y = after_stat(count / sum(count))), position = "dodge") + geom_text(stat = "count", aes(y = after_stat(count / sum(count)), label = scales::percent(after_stat(count / sum(count)), accuracy = 0.1)), position = position_dodge(width = 0.9), vjust = -0.3, color = "black") + scale_fill_manual(values = c("Yes" = "#00BFC4")) + scale_y_continuous(labels = scales::percent_format()) + labs(title = "Distribution of Employees Who Left By Job Level", x = "Job Level", y = "Percentage of Employees") + theme(legend.position = "none")
+
+#Creating new data set for only job level 1
+turnover_level1 <- turnover %>% filter(JobLevel == 1)
+dim(turnover_level1)
+
+#Graph 5 - Job Satisfaction x Attrition in Job Level 1
+ggplot(data = turnover_level1, aes(x = JobSatisfaction, fill = Attrition)) + geom_bar(aes(y = after_stat(count / sum(count))), position = "dodge") + geom_text(stat = "count", aes(y = after_stat(count / sum(count)), label = scales::percent(after_stat(count / sum(count)), accuracy = 1)), position = position_dodge(width = 0.9), vjust = -0.3, color = "black") + scale_y_continuous(labels = scales::percent_format()) + labs(title = "Attrition by Job Satisfaction in Job Level 1", x = "Job Satisfaction", y = "Percentage of Employees")
+#Lower level employees seem to have lower job satisfaction
+
+#Graph 6 - Overtime x Attrition in Job Level 1
+ggplot(data = turnover_level1, aes(x = OverTime, fill = Attrition)) + geom_bar(aes(y = after_stat(count / sum(count))), position = "dodge") + geom_text(stat = "count", aes(y = after_stat(count / sum(count)), label = scales::percent(after_stat(count / sum(count)), accuracy = 1)), position = position_dodge(width = 0.9), vjust = -0.3, color = "black") + scale_y_continuous(labels = scales::percent_format()) + labs(title = "Attrition by Overtime in Job Level 1", x = "Overtime", y = "Percentage of Employees") 
+#Lower level employees who worked overtime are likely to leave the company more than those who didn't work overtime
+
+```
+
+
+#KNN Model
+```{r}
+knn_data <- turnover[, c("Attrition", "JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")]
+  
+#Predictor variables must be numeric, so we need to convert OverTime to binary variables (1 = Yes, 0 =)
+knn_data$OverTime <- ifelse(knn_data$OverTime == "Yes", 1, 0)
+
+#Train / Test split
+set.seed(123)
+
+trainIndices <- sample(1:nrow(knn_data), 0.7*nrow(knn_data))
+
+train <- knn_data[trainIndices,]
+test <- knn_data[-trainIndices,]
+
+#Scale
+train_x <- scale(train[, c("JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")])
+
+train_center <- attr(train_x, "scaled:center") #attr() gets a specific attribute (center) from an object (data frame)
+train_scale <- attr(train_x, "scaled:scale")
+
+test_x <- scale(test[, c("JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")], center = train_center, scale = train_scale)
+
+train_y <- train$Attrition
+test_y <- test$Attrition
+
+classifications = knn(train_x, test_x, train_y, k = 7)
+
+cm = confusionMatrix(table(Predictions = classifications, Actual = test_y), positive = "Yes")
+cm
+
+#Recode Yes/No to Left/Stayed
+knn_cm <- as.data.frame(cm$table)
+knn_cm <- knn_cm %>% dplyr::mutate(Actual = dplyr::recode(Actual, "Yes" = "Left", "No" = "Stayed"), Predictions = dplyr::recode(Predictions, "Yes" = "Left", "No" = "Stayed"))
+
+#Plotting heatmap
+ggplot(knn_cm, aes(x = Predictions, y = Actual, fill = Freq)) + geom_tile() + geom_text(aes(label = Freq)) + scale_fill_gradient(low = "white", high = "blue") + labs(title = "KNN Confusion Matrix", fill = "Frequency") + theme(legend.position = "none")
+```
+
+
+#Determining which k for KNN is best
+```{r}
+set.seed(123)
+
+trainIndices <- sample(1:nrow(knn_data), 0.7*nrow(knn_data))
+
+train <- knn_data[trainIndices,]
+test <- knn_data[-trainIndices,]
+
+#Scale
+train_x <- scale(train[, c("JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")])
+
+train_center <- attr(train_x, "scaled:center")
+train_scale <- attr(train_x, "scaled:scale")
+
+test_x <- scale(test[, c("JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")], center = train_center, scale = train_scale)
+
+accs = data.frame(accuracy = numeric(50), k = numeric(50))
+
+for(i in 1:50)
+{
+  classifications = knn(train_x, test_x, train$Attrition, k = i)
+  CM = confusionMatrix(classifications, test$Attrition)
+  accs$accuracy[i] = CM$overall[1]
+  accs$k[i] = i
+}
+
+plot(accs$k,accs$accuracy, type = "l", xlab = "k", ylab = "Accuracy", main = "Accuracy vs K")
+abline(v = c(7), col = "red")
+
+#Accuracy has the highest steep between k = 1 and k = 10
+```
+
+
+#NB Model
+```{r}
+nb_data <- turnover[, c("Attrition", "JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")]
+
+#Converting char variables to factors
+nb_data$OverTime <- as.factor(nb_data$OverTime)
+nb_data$JobLevel <- as.factor(nb_data$JobLevel)
+
+#Train / Test Split
+set.seed(123)
+
+trainIndices_nb <- sample(1:nrow(nb_data), 0.7*nrow(nb_data))
+
+train_nb <- nb_data[trainIndices_nb,]
+test_nb <- nb_data[-trainIndices_nb,]
+
+#Naive Bayes Model
+nb_model <- naiveBayes(Attrition ~ ., data = train_nb, laplace = 1)
+
+nb_class <- predict(nb_model, test_nb)
+
+cm_nb <- confusionMatrix(nb_class, test_nb$Attrition, positive = "Yes")
+cm_nb
+
+#Recoding Yes/No as Left/Stayed
+nb_cm <- as.data.frame(cm_nb$table)
+nb_cm <- nb_cm %>% dplyr::mutate(Reference = dplyr::recode(Reference, "Yes" = "Left", "No" = "Stayed"), Prediction = dplyr::recode(Prediction, "Yes" = "Left", "No" = "Stayed"))
+
+#Plotting heatmap
+ggplot(nb_cm, aes(x = Prediction, y = Reference, fill = Freq)) + geom_tile() + geom_text(aes(label = Freq)) + scale_fill_gradient(low = "white", high = "blue") + labs(title = "Naive Bayes Confusion Matrix", fill = "Frequency", x = "Predictions", y = "Actual") + theme(legend.position = "none")
+```
+
+
+#Plotting Sensitivity and Specificity
+```{r}
+metrics <- data.frame(Model = rep(c("KNN", "Naive Bayes"), each = 2), Metric = rep(c("Sensitivity", "Specificity"), times = 2), Values = c(0.2692, 0.9617,  0.32692, 0.97129))
+
+ggplot(metrics, aes(x = Metric, y = Values, fill = Model)) + geom_bar(stat = "identity", position = "dodge") + geom_text(aes(label = round(Values, 2)), position = position_dodge(width = 0.9), vjust = -0.3) + scale_fill_manual(values = c("KNN" = "#2CA02C", "Naive Bayes" = "#FF7F0E")) + labs(title = "Model Performance Comparison", y = "Score") + theme_minimal()
+```
+
+
+#Reconfiguring KNN model to achieve 60% sensitivity and specificity
+```{r}
+prop.table(table(knn_data$Attrition))
+#The data is imbalanced, with No being at 84% and Yes at 16%
+
+knn_data <- turnover[, c("Attrition", "JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")]
+  
+#Convert OverTime to numeric
+knn_data$OverTime <- ifelse(knn_data$OverTime == "Yes", 1, 0)
+
+#Train / Test split
+set.seed(123)
+
+trainIndices <- sample(1:nrow(knn_data), 0.7*nrow(knn_data))
+
+train <- knn_data[trainIndices,]
+test <- knn_data[-trainIndices,]
+
+#Partial upsampling to balance out classes
+train_yes <- train %>% filter(Attrition == "Yes")
+train_no <- train %>% filter(Attrition == "No")
+
+#Upsample (address class imbalance) the "Yes" to 70% of the "No" size
+set.seed(123)
+train_yes_bal <- train_yes[sample(1:nrow(train_yes), round(0.7*nrow(train_no)), replace = TRUE), ]
+
+#Combine balanced dataset
+train_balanced <- bind_rows(train_no, train_yes_bal)
+
+#Separate predictors and outcomes
+train_x <- scale(train_balanced[, c("JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")])
+train_y <- train_balanced$Attrition
+
+#Scaling Parameters
+train_center <- attr(train_x, "scaled:center") #attr() gets a specific attribute (center) from an object (data frame)
+train_scale <- attr(train_x, "scaled:scale")
+
+test_x <- scale(test[, c("JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")], center = train_center, scale = train_scale)
+test_y <- test$Attrition
+
+#Determining the strongest k-value
+k_values <- c(3, 5, 7, 9)
+knn_results <- data.frame(k = integer(), Sensitivity = numeric(), Specificity = numeric(), Accuracy = numeric())
+
+for (k in k_values) {
+  predictor <- knn(train_x, test_x, train_y, k = k)
+  cm <- confusionMatrix(table(Predictions = predictor, Actual = test_y), positive = "Yes")
+  
+  knn_results <- rbind(knn_results, data.frame(
+    k = k,
+    Sensitivity = as.numeric(cm$byClass["Sensitivity"]),
+    Specificity = as.numeric(cm$byClass["Specificity"]),
+    Accuracy = as.numeric(cm$overall["Accuracy"])))
+}
+
+best_k <- knn_results %>%
+  filter(Sensitivity >= 0.6, Specificity >= 0.6) %>%
+  arrange(desc(Accuracy)) %>%
+  slice(1)
+
+best_k
+#Best k = 3
+
+#Final model
+final_classifications = knn(train_x, test_x, train_y, k = best_k$k)
+
+final_cm = confusionMatrix(table(Predictions = final_classifications, Actual = test_y), positive = "Yes")
+final_cm
+
+#Plotting KNN heatmap
+cm_final <- as.data.frame(final_cm$table)
+cm_final <- cm_final %>% dplyr::mutate(Actual = dplyr::recode(Actual, "Yes" = "Left", "No" = "Stayed"), Predictions = dplyr::recode(Predictions, "Yes" = "Left", "No" = "Stayed"))
+
+ggplot(cm_final, aes(Predictions, Actual, fill = Freq)) + geom_tile() + geom_text(aes(label = Freq)) + scale_fill_gradient(low = "white", high = "blue") + labs(title = "KNN Confusion Matrix", fill = "Frequency") + theme(legend.position = "none")
+```
+
+
+#Reconfiguring NB Model to achieve at least 60% sensitivity and specificity
+```{r}
+nb_data <- turnover[, c("Attrition", "JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")]
+
+#Converting char variables to factors
+nb_data$OverTime <- as.factor(nb_data$OverTime)
+nb_data$JobLevel <- as.factor(nb_data$JobLevel)
+
+#Train / Test Split
+set.seed(123)
+
+trainIndices_nb <- sample(1:nrow(nb_data), 0.7*nrow(nb_data))
+
+train_nb <- nb_data[trainIndices_nb,]
+test_nb <- nb_data[-trainIndices_nb,]
+
+#Balancing the Data
+train_nb_yes <- train_nb %>% filter(Attrition == "Yes")
+train_nb_no <- train_nb %>% filter(Attrition == "No")
+
+#Upsample (address class imbalance) the "Yes" to 70% of the "No" size
+set.seed(123)
+train_yes_nb_bal <- train_nb_yes[sample(1:nrow(train_nb_yes), round(0.7*nrow(train_nb_no)), replace = TRUE), ]
+
+#Combine balanced dataset
+train_nb_balanced <- bind_rows(train_nb_no, train_yes_nb_bal)
+
+#Naive Bayes Model
+nb_model <- naiveBayes(Attrition ~ ., data = train_nb_balanced, laplace = 1) 
+
+#Predicting probabilities
+nb_class <- predict(nb_model, test_nb, type = "raw")[, "Yes"]
+
+#Applying a threshold
+threshold <- 0.45
+nb_class_new <- factor(ifelse(nb_class > threshold, "Yes", "No"), levels = c("No", "Yes"))
+
+#Confusion matrix with threshold
+cm_nb_new <- confusionMatrix(nb_class_new, test_nb$Attrition, positive = "Yes")
+cm_nb_new
+
+#Plotting new heatmap
+nb_cm_new <- as.data.frame(cm_nb_new$table)
+nb_cm_new <- nb_cm_new %>% dplyr::mutate(Reference = dplyr::recode(Reference, "Yes" = "Left", "No" = "Stayed"), Prediction = dplyr::recode(Prediction, "Yes" = "Left", "No" = "Stayed"))
+
+ggplot(nb_cm_new, aes(Prediction, Reference, fill = Freq)) + geom_tile() + geom_text(aes(label = Freq)) + scale_fill_gradient(low = "white", high = "blue") + labs(title = "Naive Bayes Confusion Matrix", fill = "Frequency", x = "Predictions", y = "Actual") + theme(legend.position = "none")
+```
+
+
+#Plotting Sensitivity and Specificity for New Models
+```{r}
+metrics_new <- data.frame(Model = rep(c("KNN", "Naive Bayes"), each = 2), Metric = rep(c("Sensitivity", "Specificity"), times = 2), Values = c(0.6154, 0.7225,  0.6538, 0.6459))
+
+ggplot(metrics_new, aes(x = Metric, y = Values, fill = Model)) + geom_bar(stat = "identity", position = "dodge") + geom_text(aes(label = round(Values, 2)), position = position_dodge(width = 0.9), vjust = -0.3) + scale_fill_manual(values = c("KNN" = "#2CA02C", "Naive Bayes" = "#FF7F0E")) + labs(title = "New Model Performance Comparison", y = "Score") + theme_minimal()
+```
+
+
+#Validation Portion - No Attrition CSV
+```{r}
+#Import CaseStudy1CompSet No Attrition.csv
+competition <- read.csv("../assets/data/CaseStudy1CompSet No Attrition.csv", header = TRUE)
+colnames(competition)
+
+#Convert overtime into a factor to be a predictor
+competition$OverTime <- ifelse(competition$OverTime == "Yes", 1, 0)
+competition_data <- competition[, c("JobLevel", "JobSatisfaction", "OverTime", "Age", "MonthlyIncome")]
+
+#Scale using training parameters 
+competition_data <- scale(
+  competition_data,
+  center = train_center,
+  scale = train_scale
+)
+
+competition_predictions <- knn(
+  train = train_x,
+  test = competition_data,
+  cl = train_y,
+  k = best_k$k
+)
+
+length(competition_predictions) #300
+
+#Creating a CSV file
+competition_submission <- data.frame(
+  ID = competition$ID,
+  Attrition = competition_predictions
+)
+
+#Convert predictions into characters to prevent formatting issues
+competition_submission$Attrition <- as.character(competition_submission$Attrition)
+
+#Order by ID
+competition_submission <- competition_submission[order(competition_submission$ID), ]
+
+#Exporting the CSV file
+write.csv(
+  competition_submission,
+  "Case1PredictionsJohnAttrition.csv",
+  row.names = FALSE
+)
+```
+
+
+#Predictions
+```{r}
+predictions <- read.csv("../assets/data/Case1PredictionsJohnAttrition.csv")
+head(predictions)
+```
+
+
+# Video Presentation
+
+Click here to watch my presentation: [My YouTube Video](https://youtu.be/IEmBZYtSBw0)
