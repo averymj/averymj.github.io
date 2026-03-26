@@ -2,7 +2,7 @@
 layout: page
 title: Employee Attrition Case Study
 description: Examining the potential factors of employee attrition at Frito Lay through data visualizations and classification modeling.
-img:
+img: casestudy1.png
 importance: 3
 category: work
 ---
