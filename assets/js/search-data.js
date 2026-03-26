@@ -476,6 +476,11 @@ ninja.data = [{
           description: "Demonstration of the Central Limit Theorem",
           section: "Projects",handler: () => {
               window.location.href = "/projects/CLT_2--1-/";
+            },},{id: "projects-case-study-1-dds",
+          title: 'Case Study 1 DDS',
+          description: "",
+          section: "Projects",handler: () => {
+              window.location.href = "/projects/CaseStudy1_AveryJohn/";
             },},{id: "projects-employee-attrition-case-study",
           title: 'Employee Attrition Case Study',
           description: "Examining the potential factors of employee attrition at Frito Lay through data visualizations and classification modeling.",
