@@ -2,7 +2,6 @@
   "basics": {
     "name": "Avery John",
     "email": "averyjohn@smu.edu",
-    },
     "profiles": []
   },
   "work": [
@@ -51,7 +50,7 @@
       "area": "Data Science",
       "studyType": "M.S.",
       "startDate": "2026",
-      "endDate": "Present",
+      "endDate": "",
       "courses": ["Doing Data Science", "Statistical Foundations for Data Science"],
       "highlights": ["Programming: R, SAS, Python", "Data Analysis & Modeling", "Statistical Methods: Linear Regression, Hypothesis Testing", "Data Cleaning & Visualization", "Data-Driven Decision Making"]
     },
