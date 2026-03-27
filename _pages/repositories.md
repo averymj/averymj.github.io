@@ -9,22 +9,6 @@ nav_order: 4
 
 {% if site.data.repositories.github_users %}
 
-{% assign user = site.data.repositories.github_users[0] %}
-
-<div class="card p-4 mb-4 text-center">
-
-  <h3>{{ user }}</h3>
-
-  <p class="text-muted">
-    GitHub Profile
-  </p>
-
-  <a href="https://github.com/{{ user }}" target="_blank" class="btn btn-outline-primary btn-sm">
-    Visit Profile →
-  </a>
-
-</div>
-
 ## GitHub users
 
 <div class="repositories d-flex flex-wrap flex-md-row flex-column justify-content-between align-items-center">
