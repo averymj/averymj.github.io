@@ -6,7 +6,7 @@ subtitle: Data Science & Analytics
 
 profile:
   align: right
-  image: AveryHeadshot.jpg
+  image: AveryHeadshotNew.jpg
   image_circular: false # crops the image to make it circular
 
 selected_papers: false # includes a list of papers marked as "selected={true}"
