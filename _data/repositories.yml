@@ -1,8 +1,8 @@
-profile:
+github_users:
   - averymj
 
 repo_description_lines_max: 2
 
-repos:
+github_repos:
   - averymj/CaseStudy1DDS
   - averymj/averymj.github.io
