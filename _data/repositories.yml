@@ -1,5 +1,7 @@
 github_users:
   - averymj
 
+repo_description_lines_max: 2
+
 github_repos:
   - averymj/CaseStudy1DDS
